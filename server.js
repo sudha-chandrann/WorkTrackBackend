@@ -16,14 +16,14 @@ app.use(express.json());
 // Socket.IO setup
 const io = new Server(server, {
   cors: {
-    origin: "http://localhost:3000", // Replace with your frontend's origin
+    origin: "http://localhost:3000", 
     methods: ["GET", "POST"]
   }
 });
 
 // Socket connection handler
 io.on("connection", async (socket) => {
-  console.log("🔌 New client connected:", socket.id);
+  console.log(" New client connected:", socket.id);
   
   // Handle user joining rooms based on their userId
   socket.on("joinUserRoom", (userId) => {
