@@ -12,6 +12,9 @@ const server = http.createServer(app);
 // Middleware
 app.use(cors());
 app.use(express.json());
+app.get('/', (req, res) => {
+    res.send('Welcome to the homepage!');
+  });
 
 // Socket.IO setup
 const io = new Server(server, {
