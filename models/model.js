@@ -45,7 +45,15 @@ const userSchema = new Schema({
         type: Schema.Types.ObjectId,
         ref: 'Team'
     }],
+    passwordResetCode:{
+        type:String
+    },
+    passwordResetExpires: {
+        type: Date
+    },
+
 }, { timestamps: true });
+
 
 
 
