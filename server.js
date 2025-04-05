@@ -4,7 +4,7 @@ import cors from "cors";
 import { Server } from "socket.io";
 import http from "http";
 import dbConnect from "./lib/dbConnect.js";
-import { Comment, Team, Todo } from "./models/model.js";
+import { Comment, Subtask, Team, Todo } from "./models/model.js";
 
 const app = express();
 const server = http.createServer(app);
@@ -233,6 +233,199 @@ io.on("connection", async (socket) => {
       
       // Also emit to sender for confirmation
       socket.emit("commentDeleteSuccess", {
+        success: true,
+        message: "Comment deleted successfully",
+      });
+    } catch (error) {
+      console.error("Error deleting comment:", error);
+      socket.emit("error", {
+        success: false,
+        message: "Failed to delete comment",
+        error: error.message,
+      });
+    }
+  });
+   
+  socket.on("addCommentTosubTodo", async (data) => {
+    const { subtodoId, comment, teamId, userId } = data;
+
+    try {
+      // Find the todo
+      const  subtask = await Subtask.findById(subtodoId);
+      if (!subtask) {
+        return socket.emit("error", {
+          success: false,
+          message: "subtask not found",
+        });
+      }
+
+      // Create new comment
+      const newcomment = new Comment({
+        taskRef: subtask,
+        onModel: "Subtask",
+        author: userId,
+        content: comment,
+      });
+
+      // Save comment and update todo
+      await newcomment.save();
+      subtask.comments.push(newcomment._id);
+      await subtask.save();
+
+      // Find team and formatted comment
+      const team = await Team.findById(teamId);
+      const formatComment = await Comment.findById(newcomment._id).populate(
+        "author",
+        "username fullName email"
+      );
+
+      // Emit to team room
+      io.to(`team:${teamId}`).emit("commentsubtodoAdded", {
+        success: true,
+        comment: formatComment,
+        subtodoId: subtodoId,
+      });
+
+      // Also emit to sender for confirmation
+      socket.emit("commentAdded", {
+        success: true,
+        message: "Comment added successfully",
+      });
+    } catch (error) {
+      console.error("Error adding comment:", error);
+      socket.emit("error", {
+        success: false,
+        message: "Failed to add comment",
+      });
+    }
+  });
+
+  socket.on("editsubTodoComment", async (data) => {
+    const { subtodoId, editContent, teamId, userId, commentId } = data;
+
+    try {
+      // Validate inputs
+      if (!subtodoId || !editContent || !teamId || !userId || !commentId) {
+        return socket.emit("error", {
+          success: false,
+          message: "Missing required fields",
+        });
+      }
+      // Find the comment first
+      const comment = await Comment.findById(commentId);
+      if (!comment) {
+        return socket.emit("error", {
+          success: false,
+          message: "Comment not found",
+        });
+      }
+
+      // Check if user is the comment author
+      if (comment.author.toString() !== userId.toString()) {
+        return socket.emit("error", {
+          success: false,
+          message: "You are not the author of this comment",
+        });
+      }
+
+      // Verify todo exists
+      const subtask = await Subtask.findById(subtodoId);
+      if (!subtask) {
+        return socket.emit("error", {
+          success: false,
+          message: "subtask not found",
+        });
+      }
+
+      // Update comment content
+      comment.content = editContent;
+      comment.updatedAt = new Date();
+      await comment.save();
+
+      // Get populated comment for response
+      const formattedComment = await Comment.findById(commentId).populate(
+        "author",
+        "username fullName email"
+      );
+
+      // Emit to team room
+      io.to(`team:${teamId}`).emit("subtodoCommentEdited", {
+        success: true,
+        comment: formattedComment,
+        subtaskId: subtodoId,
+      });
+
+      // Also emit to sender for confirmation
+      socket.emit("SubTodocommentEditSuccess", {
+        success: true,
+        message: "Comment edited successfully",
+      });
+    } catch (error) {
+      console.error("Error editing comment:", error);
+      socket.emit("error", {
+        success: false,
+        message: "Failed to edit comment",
+        error: error.message,
+      });
+    }
+  });
+
+  socket.on("deletesubTodoComment", async (data) => {
+    const { subtodoId, teamId, userId, commentId } = data;
+    
+    try {
+      // Validate inputs
+      if (!subtodoId || !teamId || !userId || !commentId) {
+        return socket.emit("error", {
+          success: false,
+          message: "Missing required fields",
+        });
+      }
+      
+      // Find the comment first
+      const comment = await Comment.findById(commentId);
+      if (!comment) {
+        return socket.emit("error", {
+          success: false,
+          message: "Comment not found",
+        });
+      }
+      
+      // Check if user is the comment author
+      if (comment.author.toString() !== userId.toString()) {
+        return socket.emit("error", {
+          success: false,
+          message: "You are not the author of this comment",
+        });
+      }
+      
+      // Verify todo exists
+      const subtask = await Subtask.findById(subtodoId);
+      if (!subtask) {
+        return socket.emit("error", {
+          success: false,
+          message: "subtask not found",
+        });
+      }
+      
+      // Remove comment from the todo's comments array
+      if (subtask.comments && subtask.comments.includes(commentId)) {
+        subtask.comments = subtask.comments.filter(id => id.toString() !== commentId.toString());
+        await subtask.save();
+      }
+      
+      // Delete the comment document
+      await Comment.findByIdAndDelete(commentId);
+      
+      // Emit to team room
+      io.to(`team:${teamId}`).emit("subtodoCommentDeleted", {
+        success: true,
+        commentId: commentId,
+        subtodoId: subtodoId,
+      });
+      
+      // Also emit to sender for confirmation
+      socket.emit("subtodocommentDeleteSuccess", {
         success: true,
         message: "Comment deleted successfully",
       });
