@@ -106,6 +106,76 @@ io.on("connection", async (socket) => {
     }
   });
 
+  socket.on("editTodoComment", async (data) => {
+    const { todoId, editContent, teamId, userId, commentId } = data;
+    
+    try {
+      // Validate inputs
+      if (!todoId || !editContent || !teamId || !userId || !commentId) {
+        return socket.emit("error", {
+          success: false,
+          message: "Missing required fields"
+        });
+      }
+  
+      // Find the comment first
+      const comment = await Comment.findById(commentId);
+      if (!comment) {
+        return socket.emit("error", {
+          success: false,
+          message: "Comment not found"
+        });
+      }
+  
+      // Check if user is the comment author
+      if (comment.author.toString() !== userId.toString()) {
+        return socket.emit("error", {
+          success: false,
+          message: "You are not the author of this comment"
+        });
+      }
+  
+      // Verify todo exists
+      const todo = await Todo.findById(todoId);
+      if (!todo) {
+        return socket.emit("error", {
+          success: false,
+          message: "Todo not found"
+        });
+      }
+      
+      // Update comment content
+      comment.content = editContent;
+      comment.updatedAt = new Date();
+      await comment.save();
+  
+      // Get populated comment for response
+      const formattedComment = await Comment.findById(commentId)
+        .populate("author", "username fullName email");
+      
+      // Emit to team room
+      io.to(`team:${teamId}`).emit("todoCommentEdited", {
+        success: true,
+        comment: formattedComment,
+        todoId: todoId
+      });
+      
+      // Also emit to sender for confirmation
+      socket.emit("commentEdited", {
+        success: true,
+        message: "Comment edited successfully"
+      });
+      
+    } catch (error) {
+      console.error("Error editing comment:", error);
+      socket.emit("error", {
+        success: false,
+        message: "Failed to edit comment",
+        error: error.message
+      });
+    }
+  });
+
   // Handle disconnect
   socket.on("disconnect", () => {
     console.log(" Client disconnected:", socket.id);
